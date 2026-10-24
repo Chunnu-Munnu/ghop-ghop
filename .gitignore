@@ -13,3 +13,5 @@ sdkconfig.old
 firmware/sdkconfig.wifi
 firmware/managed_components/
 firmware/dependencies.lock
+.playwright-mcp/
+projection-*.png

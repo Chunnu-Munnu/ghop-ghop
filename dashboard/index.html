@@ -222,10 +222,15 @@
     .scene-key span { display: inline-flex; gap: 5px; align-items: center; }
     .scene-key i { width: 8px; height: 8px; background: currentColor; }
     .scene-key .rx { color: var(--brand); } .scene-key .target { color: var(--ok); } .scene-key .wall { color: #8491a0; }
+    .scene-readouts { display: grid; grid-template-columns: repeat(3, minmax(72px, 1fr)); border: 1px solid var(--line-strong); background: rgba(11, 13, 17, .9); }
+    .scene-readouts div { padding: 7px 9px; border-right: 1px solid var(--line); }
+    .scene-readouts div:last-child { border-right: 0; }
+    .scene-readouts b { display: block; color: var(--text); font: 600 12px/1.2 var(--mono); }
+    .scene-readouts span { color: var(--muted); font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
 
     /* Product surfaces stay deliberately square and crisp. Dots are status indicators. */
     .topbar, .card, .btn, .settings, .chip, .progress, .score .bar, .metric, .device-line,
-    .step-n, .cal-status, .sim-badge, .toast, .link-pill, .legend i, .scene-status, .scene-key { border-radius: 0; }
+    .step-n, .cal-status, .sim-badge, .toast, .link-pill, .legend i, .scene-status, .scene-key, .scene-readouts { border-radius: 0; }
 
     .toast {
       position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
@@ -249,6 +254,7 @@
       .grid { gap: 12px; }
       .span-4, .span-6, .span-3, #radarCard { grid-column: span 12; }
       .scene-card { min-height: 390px; } #sceneCanvas { height: 390px; }
+      .scene-readouts { display: none; }
       .hero { grid-template-columns: 1fr; }
       .hero-side { flex-direction: row; justify-content: space-between; }
       #orb { width: 112px; height: 112px; }
@@ -292,7 +298,7 @@
         <canvas id="sceneCanvas" aria-label="Three-dimensional Wi-Fi CSI signal projection showing the receiver, range rings, an obstacle, and a breathing-signal target when detected"></canvas>
         <div class="scene-head">
           <div><div class="scene-eyebrow">Spatial signal view</div><div class="scene-title" id="sceneTitle">CSI breathing projection</div></div>
-          <div class="scene-status" id="sceneStatus">Awaiting signal</div>
+          <div style="display:flex; gap:8px; align-items:flex-start"><div class="scene-readouts" aria-label="Spatial target telemetry"><div><b id="sceneRate">--</b><span>rate</span></div><div><b id="sceneDistance">--</b><span>range</span></div><div><b id="sceneConfidence">--</b><span>confidence</span></div></div><div class="scene-status" id="sceneStatus">Awaiting signal</div></div>
         </div>
         <div class="scene-foot">
           <p id="sceneDetail">A target appears only when the CSI pipeline reports a breathing-like periodic signal. This is not camera or pose tracking.</p>
@@ -748,17 +754,22 @@
     // ----------------------------------------------------- 3D CSI projection
     // This is deliberately a signal visualisation: it has no camera input and
     // does not attempt to infer a person's pose or identity.
-    const projection = { renderer: null, scene: null, camera: null, controls: null, target: null, chest: null, glow: null, light: null, path: null, pulse: null, waves: null, targetPosition: null };
+    const projection = { renderer: null, scene: null, camera: null, controls: null, target: null, chest: null, glow: null, light: null, path: null, pulse: null, waves: null, beam: null, scanRing: null, label: null, labelCanvas: null, labelTexture: null, labelKey: '', targetPosition: null };
 
     function updateProjectionStatus() {
       const data = view.data;
       const status = $('sceneStatus'), detail = $('sceneDetail');
+      const rate = $('sceneRate'), distance = $('sceneDistance'), confidence = $('sceneConfidence');
       if (!view.connected || !data) {
+        rate.textContent = '--'; distance.textContent = '--'; confidence.textContent = '--';
         status.textContent = 'Awaiting signal';
         detail.textContent = 'A target appears only when the CSI pipeline reports a breathing-like periodic signal. This is not camera or pose tracking.';
         return;
       }
       const simulated = data.source === 'simulation' ? 'Simulation · ' : '';
+      rate.textContent = data.bpm != null ? `${Number(data.bpm).toFixed(1)} BPM` : '--';
+      distance.textContent = data.distance_m != null ? `${Number(data.distance_m).toFixed(1)} m` : 'uncal.';
+      confidence.textContent = pct(data.confidence);
       if (data.state === 'breathing') {
         status.textContent = `${simulated}Breathing signal`;
         const rate = data.bpm != null ? `${Number(data.bpm).toFixed(1)} BPM` : 'periodic component';
@@ -771,6 +782,37 @@
         status.textContent = `${simulated}${data.state === 'warming_up' ? 'Analysing CSI' : 'No target'}`;
         detail.textContent = 'No qualified breathing-like periodic signal is currently available, so no person projection is shown.';
       }
+    }
+
+    function makeProjectionLabel(T) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 560; canvas.height = 154;
+      const texture = new T.CanvasTexture(canvas); texture.minFilter = T.LinearFilter;
+      const label = new T.Sprite(new T.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+      label.scale.set(2.55, .7, 1); label.position.set(0, 3.15, 0);
+      projection.label = label; projection.labelCanvas = canvas; projection.labelTexture = texture;
+      return label;
+    }
+
+    function updateProjectionLabel() {
+      if (!projection.labelCanvas || !projection.labelTexture) return;
+      const data = view.data || {};
+      const active = view.connected && data.state === 'breathing';
+      projection.label.visible = active;
+      if (!active) return;
+      const bpm = data.bpm != null ? `${Number(data.bpm).toFixed(1)} BPM` : 'PERIODIC COMPONENT';
+      const range = data.distance_m != null ? `${Number(data.distance_m).toFixed(1)} M EST. RANGE` : 'RANGE NOT CALIBRATED';
+      const key = `${bpm}|${range}|${pct(data.confidence)}`;
+      if (key === projection.labelKey) return;
+      projection.labelKey = key;
+      const ctx = projection.labelCanvas.getContext('2d');
+      ctx.clearRect(0, 0, 560, 154);
+      ctx.fillStyle = 'rgba(8, 13, 17, .92)'; ctx.fillRect(3, 3, 554, 148);
+      ctx.strokeStyle = '#35dca0'; ctx.lineWidth = 3; ctx.strokeRect(3, 3, 554, 148);
+      ctx.fillStyle = '#75f0c2'; ctx.font = '600 19px ui-monospace, Menlo, Consolas, monospace'; ctx.fillText('CSI SIGNAL TARGET', 24, 35);
+      ctx.fillStyle = '#f1f7f5'; ctx.font = '700 42px ui-monospace, Menlo, Consolas, monospace'; ctx.fillText(bpm, 24, 84);
+      ctx.fillStyle = '#adbdc5'; ctx.font = '600 18px ui-monospace, Menlo, Consolas, monospace'; ctx.fillText(`${range}  ·  ${pct(data.confidence)} CONF.`, 24, 121);
+      projection.labelTexture.needsUpdate = true;
     }
 
     function initProjection() {
@@ -797,6 +839,7 @@
         }
         scene.add(new T.HemisphereLight(0x90b5d5, 0x030507, 1.3));
         const key = new T.DirectionalLight(0xc2d5ea, 0.85); key.position.set(3, 7, 4); scene.add(key);
+        const rim = new T.DirectionalLight(0x216cff, 0.55); rim.position.set(-5, 3, -4); scene.add(rim);
 
         const floor = new T.Mesh(new T.CircleGeometry(7.5, 80), new T.MeshStandardMaterial({ color: 0x0d131a, roughness: 0.94, metalness: 0.08 }));
         floor.rotation.x = -Math.PI / 2; scene.add(floor);
@@ -813,11 +856,11 @@
         const rxLight = new T.PointLight(0x3dd8ff, 1.2, 3.3); rxLight.position.set(0, 0.6, 0); receiver.add(rxLight); scene.add(receiver);
 
         const wall = new T.Group();
-        const wallMat = new T.MeshStandardMaterial({ color: 0x56606b, roughness: 0.93, metalness: 0.03 });
-        [[-.42,.42,.55,.82],[.2,.42,.62,.84],[.76,.31,.38,.62],[-.22,1.16,.7,.6],[.45,1.2,.58,.56]].forEach(([x,y,w,h], i) => {
+        const wallMat = new T.MeshStandardMaterial({ color: 0x63707c, roughness: 0.9, metalness: 0.04, transparent: true, opacity: 0.72 });
+        [[-.56,.35,.5,.65],[-.06,.48,.64,.96],[.56,.3,.45,.58],[-.36,1.08,.62,.58],[.31,1.16,.7,.64],[.85,.72,.32,.46]].forEach(([x,y,w,h], i) => {
           const block = new T.Mesh(new T.BoxGeometry(w, h, .28), wallMat); block.position.set(x, y, 0); block.rotation.z = (i - 2) * .035; wall.add(block);
         });
-        wall.position.set(2.05, 0, -0.36); scene.add(wall);
+        wall.position.set(3.15, 0, -0.42); scene.add(wall);
 
         const target = new T.Group();
         const points = [[0,2.34,0],[0,2.02,0],[-.4,1.84,0],[.4,1.84,0],[-.66,1.42,0],[.66,1.42,0],[0,1.56,0],[0,1.02,0],[-.24,.98,0],[.24,.98,0],[-.28,.42,0],[.28,.42,0],[-.3,.06,0],[.3,.06,0]];
@@ -828,17 +871,24 @@
         target.add(new T.Points(new T.BufferGeometry().setAttribute('position', new T.Float32BufferAttribute(points.flat(), 3)), new T.PointsMaterial({ color: 0xb6ffdc, size: 0.105, sizeAttenuation: true })));
         const chest = new T.Mesh(new T.SphereGeometry(.43, 18, 14), new T.MeshBasicMaterial({ color: 0x54f0ba, wireframe: true, transparent: true, opacity: .82 }));
         chest.position.y = 1.56; chest.scale.set(1, 1.2, .58); target.add(chest);
+        const head = new T.Mesh(new T.SphereGeometry(.255, 16, 14), new T.MeshBasicMaterial({ color: 0xb6ffdc, wireframe: true, transparent: true, opacity: .88 })); head.position.y = 2.34; target.add(head);
+        const torso = new T.Mesh(new T.ConeGeometry(.42, .68, 6, 1, true), new T.MeshBasicMaterial({ color: 0x49e8b0, wireframe: true, transparent: true, opacity: .32 })); torso.position.y = 1.22; torso.rotation.x = Math.PI; target.add(torso);
         const glow = new T.Mesh(new T.SphereGeometry(1.02, 24, 16), new T.MeshBasicMaterial({ color: 0x38dca4, transparent: true, opacity: .04, depthWrite: false })); glow.position.y = 1.28; target.add(glow);
         const targetLight = new T.PointLight(0x46efb2, 0.8, 4); targetLight.position.y = 1.6; target.add(targetLight);
+        target.add(makeProjectionLabel(T));
         target.visible = false; scene.add(target);
 
         const path = new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(0, .25, 0), new T.Vector3(4, 1.2, 0)]), new T.LineDashedMaterial({ color: 0x50d8ff, dashSize: .16, gapSize: .1, transparent: true, opacity: .6 }));
         path.computeLineDistances(); scene.add(path);
         const pulse = new T.Mesh(new T.SphereGeometry(.065, 12, 12), new T.MeshBasicMaterial({ color: 0x63e6ff })); pulse.visible = false; scene.add(pulse);
+        const beam = new T.Mesh(new T.CylinderGeometry(.10, .46, 1, 24, 1, true), new T.MeshBasicMaterial({ color: 0x287cff, transparent: true, opacity: .055, side: T.DoubleSide, depthWrite: false }));
+        beam.rotation.z = -Math.PI / 2; beam.visible = false; scene.add(beam);
+        const scanRing = new T.Mesh(new T.RingGeometry(.68, .705, 64), new T.MeshBasicMaterial({ color: 0x4acbff, transparent: true, opacity: .4, side: T.DoubleSide, depthWrite: false }));
+        scanRing.rotation.x = -Math.PI / 2; scanRing.position.y = .018; scene.add(scanRing);
         const waves = new T.Group();
         for (let i = 0; i < 5; i++) { const wave = new T.Mesh(new T.TorusGeometry(.38 + i * .2, .012, 8, 56), new T.MeshBasicMaterial({ color: i % 2 ? 0x4e95ff : 0x49e8b0, transparent: true, opacity: .12, depthWrite: false })); wave.rotation.y = Math.PI / 2; wave.position.set(0, .58, 0); wave.userData.phase = i / 5; waves.add(wave); }
         scene.add(waves);
-        Object.assign(projection, { renderer, scene, camera, controls, target, chest, glow, light: targetLight, path, pulse, waves, targetPosition: new T.Vector3(4, 0, 0) });
+        Object.assign(projection, { renderer, scene, camera, controls, target, chest, glow, light: targetLight, path, pulse, beam, scanRing, waves, targetPosition: new T.Vector3(4, 0, 0) });
 
         const resize = () => {
           const rect = canvas.getBoundingClientRect(); if (!rect.width || !rect.height) return;
@@ -861,6 +911,7 @@
       projection.targetPosition.set(distance, 0, 0);
       projection.target.position.lerp(projection.targetPosition, .055);
       projection.target.visible = active;
+      updateProjectionLabel();
       const time = now / 1000;
       const bpm = Number(data.bpm) || 0;
       const breath = active && bpm ? Math.max(0, Math.sin(time * 2 * Math.PI * bpm / 60)) : 0;
@@ -873,6 +924,15 @@
       attr.setXYZ(1, projection.target.position.x, 1.2, 0); attr.needsUpdate = true; projection.path.geometry.computeBoundingSphere(); projection.path.computeLineDistances();
       projection.pulse.visible = active;
       if (active) { projection.pulse.position.set(projection.target.position.x * ((time * .42) % 1), .25 + .95 * ((time * .42) % 1), 0); }
+      projection.beam.visible = active;
+      if (active) {
+        projection.beam.position.set(projection.target.position.x / 2, .42, 0);
+        projection.beam.scale.y = projection.target.position.x;
+        projection.beam.material.opacity = .035 + confidence * .055;
+      }
+      const scanPhase = (time * (.42 + confidence * .18)) % 1;
+      projection.scanRing.scale.setScalar(.62 + scanPhase * 1.8);
+      projection.scanRing.material.opacity = .28 * (1 - scanPhase) * (active ? .55 + confidence : .6);
       projection.waves.children.forEach((wave) => { const phase = (time * (.22 + confidence * .22) + wave.userData.phase) % 1; wave.scale.setScalar(.65 + phase * 1.15); wave.material.opacity = .025 + .17 * (1 - phase) * (.35 + confidence); });
       if (projection.controls) { projection.controls.target.lerp(new window.THREE.Vector3(Math.min(2.7, distance * .48), 1.08, 0), .025); projection.controls.update(); }
       projection.renderer.render(projection.scene, projection.camera);
