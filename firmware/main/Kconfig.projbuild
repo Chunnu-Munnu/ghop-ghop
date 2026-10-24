@@ -1,0 +1,33 @@
+menu "RescueSense"
+
+config RESCUE_ROUTER_MODE
+    bool "Use router / phone hotspot as CSI transmitter"
+    default y
+    help
+        Connect to an AP and ping its gateway at the configured rate. Disable
+        only when using Espressif's stock csi_send on a second ESP32.
+
+config RESCUE_PING_HZ
+    int "Router ping / CSI sample rate (Hz)"
+    range 10 150
+    default 100
+    depends on RESCUE_ROUTER_MODE
+
+config RESCUE_DIRECT_CHANNEL
+    int "Fixed Wi-Fi channel for dedicated ESP-NOW transmitter"
+    range 5 11
+    default 11
+    depends on !RESCUE_ROUTER_MODE
+    help
+        Matches the HT40 secondary-channel-below arrangement in Espressif's
+        stock csi_send example. Change the sender and receiver together.
+
+config RESCUE_BUZZER_GPIO
+    int "Buzzer GPIO (active high)"
+    range 0 48
+    default 4
+    help
+        Check your exact board schematic. ESP32-S3 GPIO22-25 are unavailable;
+        avoid strapping pins, USB 19/20, UART 43/44, and flash/PSRAM pins.
+
+endmenu

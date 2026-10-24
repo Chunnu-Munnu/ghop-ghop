@@ -1,0 +1,9 @@
+backend/.venv/
+backend/__pycache__/
+backend/calibration.json
+backend/*.joblib
+backend/recordings/
+__pycache__/
+build/
+sdkconfig
+sdkconfig.old

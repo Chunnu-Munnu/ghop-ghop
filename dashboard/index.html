@@ -1,0 +1,1011 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070b14">
+  <title>RescueSense | WiFi CSI Observatory</title>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --ink: #eaf5ff;
+      --muted: #7990a8;
+      --panel: rgba(13, 22, 36, .82);
+      --panel-strong: rgba(16, 30, 48, .96);
+      --line: rgba(143, 184, 215, .16);
+      --cyan: #5cf3e5;
+      --blue: #64a8ff;
+      --lime: #a8ff6a;
+      --orange: #ffb55b;
+      --danger: #ff5168;
+      --shadow: 0 18px 60px rgba(0, 0, 0, .28);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: #070b14; }
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(41, 102, 137, .2), transparent 30rem),
+        radial-gradient(circle at 92% 100%, rgba(35, 102, 94, .14), transparent 33rem),
+        #070b14;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: .015em;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .app-shell { max-width: 1680px; margin: 0 auto; padding: 18px; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 6px 0 19px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: max-content; }
+    .brand-mark {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      border: 1px solid rgba(92, 243, 229, .7);
+      border-radius: 12px;
+      box-shadow: inset 0 0 20px rgba(92, 243, 229, .14), 0 0 20px rgba(92, 243, 229, .1);
+      overflow: hidden;
+    }
+    .brand-mark::before, .brand-mark::after {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      border: 1px solid rgba(92, 243, 229, .65);
+      border-radius: 50%;
+    }
+    .brand-mark::after { inset: 14px; background: var(--cyan); box-shadow: 0 0 14px var(--cyan); }
+    .brand h1 { margin: 0; font-size: 17px; letter-spacing: .12em; font-weight: 700; }
+    .brand p { margin: 3px 0 0; color: var(--muted); font: 600 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .14em; }
+    .connection-strip { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .connection-strip label { color: var(--muted); font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; white-space: nowrap; }
+    .url-input {
+      width: min(295px, 28vw);
+      height: 34px;
+      color: var(--ink);
+      background: rgba(5, 10, 18, .62);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      outline: none;
+      padding: 0 10px;
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .url-input:focus { border-color: rgba(92, 243, 229, .75); box-shadow: 0 0 0 3px rgba(92, 243, 229, .1); }
+    .btn {
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 12px;
+      color: #bcd2e3;
+      background: rgba(24, 44, 65, .6);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      transition: .18s ease;
+    }
+    .btn:hover { border-color: rgba(92, 243, 229, .65); color: var(--cyan); background: rgba(92, 243, 229, .1); }
+    .btn-primary { border-color: rgba(92, 243, 229, .55); background: rgba(49, 159, 158, .23); color: var(--cyan); }
+    .btn-alert { border-color: rgba(255, 81, 104, .5); background: rgba(172, 35, 54, .2); color: #ff9baa; }
+    .btn-alert:hover { border-color: var(--danger); background: rgba(255, 81, 104, .2); color: #fff0f2; }
+    .btn-alert.active { background: var(--danger); border-color: #ff95a3; color: #fff; box-shadow: 0 0 20px rgba(255, 81, 104, .35); }
+
+    .layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(345px, .8fr); gap: 16px; padding-top: 16px; }
+    .scene-panel, .card, .chart-card { border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+    .scene-panel { position: relative; min-height: 615px; border-radius: var(--radius); overflow: hidden; isolation: isolate; }
+    #sceneCanvas { display: block; width: 100%; height: 100%; min-height: 615px; outline: none; }
+    .scene-panel::before {
+      content: "";
+      pointer-events: none;
+      position: absolute;
+      z-index: 3;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(5, 13, 24, .6), transparent 18%, transparent 75%, rgba(5, 13, 24, .68));
+    }
+    .scene-topline, .scene-footer { position: absolute; z-index: 4; left: 18px; right: 18px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
+    .scene-topline { top: 17px; }
+    .scene-footer { bottom: 15px; }
+    .eyebrow { color: #b6cad7; font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
+    .scene-title { margin-top: 7px; font-size: 16px; font-weight: 650; letter-spacing: .04em; }
+    .scene-chip { padding: 7px 9px; border-radius: 999px; color: var(--cyan); border: 1px solid rgba(92, 243, 229, .28); background: rgba(4, 18, 24, .61); font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .07em; }
+    .scene-footer { color: #8ba3b6; font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .legend { display: flex; gap: 15px; flex-wrap: wrap; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 9px currentColor; }
+    .legend .esp { color: var(--cyan); } .legend .wall { color: #8493a8; } .legend .target { color: var(--lime); }
+    .flash-overlay { pointer-events: none; position: absolute; z-index: 5; inset: 0; opacity: 0; background: rgba(255, 39, 69, .13); mix-blend-mode: screen; }
+    .scene-panel.alerting .flash-overlay { animation: alertFlash 1s ease-in-out infinite; }
+    @keyframes alertFlash { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+
+    .right-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .card { border-radius: 13px; }
+    .status-card { padding: 16px; }
+    .status-head { display: flex; gap: 11px; justify-content: space-between; align-items: flex-start; }
+    .status-kicker { color: var(--muted); font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .12em; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 8px;
+      padding: 7px 9px;
+      color: #b8c7d2;
+      border: 1px solid rgba(126, 153, 171, .26);
+      border-radius: 999px;
+      background: rgba(97, 122, 139, .08);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .06em;
+    }
+    .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #8193a1; }
+    .badge.present { color: #cfffaf; border-color: rgba(168, 255, 106, .38); background: rgba(105, 166, 69, .11); }
+    .badge.present::before { background: var(--lime); box-shadow: 0 0 11px var(--lime); }
+    .badge.uncertain { color: #ffdba4; border-color: rgba(255, 181, 91, .4); background: rgba(255, 181, 91, .1); }
+    .badge.uncertain::before { background: var(--orange); box-shadow: 0 0 11px var(--orange); }
+    .source-state { text-align: right; color: var(--muted); font: 10px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; }
+    .source-dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 10px var(--orange); }
+    .source-dot.live { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+    .source-dot.offline { background: #687b8d; box-shadow: none; }
+    .metrics { display: grid; grid-template-columns: 1.18fr .82fr; gap: 11px; margin-top: 16px; }
+    .metric { min-width: 0; padding: 12px; border-radius: 10px; background: rgba(2, 10, 18, .44); border: 1px solid rgba(126, 165, 192, .09); }
+    .metric-label { color: var(--muted); font: 700 9px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .11em; text-transform: uppercase; }
+    .bpm { display: flex; align-items: baseline; gap: 6px; margin-top: 8px; }
+    .bpm strong { color: #fbffff; font-size: clamp(35px, 4.2vw, 52px); line-height: .82; font-weight: 750; letter-spacing: -.06em; }
+    .bpm span { color: var(--cyan); font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .08em; }
+    .metric-value { display: flex; align-items: baseline; gap: 4px; margin-top: 9px; color: #edf9ff; font-size: 23px; font-weight: 720; letter-spacing: -.04em; }
+    .metric-value small { color: #90a9ba; font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+    .confidence-bar { height: 5px; margin-top: 10px; overflow: hidden; border-radius: 99px; background: rgba(111, 139, 159, .18); }
+    .confidence-bar span { display: block; height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, #438def, var(--cyan)); box-shadow: 0 0 10px rgba(92, 243, 229, .5); transition: width .45s ease; }
+    .proximity-row { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-top: 11px; }
+    .small-metric { padding: 10px 11px; border-top: 1px solid rgba(143, 184, 215, .12); }
+    .small-metric .metric-value { margin-top: 5px; font-size: 17px; }
+    .status-message { margin: 11px 0 0; color: #9eb1bf; font-size: 11px; line-height: 1.35; }
+    .status-message strong { color: var(--ink); font-weight: 700; }
+
+    .command-card { padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+    .command-icon { display: grid; flex: 0 0 auto; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #ff9dad; background: rgba(255, 81, 104, .1); border: 1px solid rgba(255, 81, 104, .19); }
+    .command-icon svg { width: 16px; height: 16px; }
+    .command-copy { min-width: 0; margin-right: auto; }
+    .command-copy b { display: block; font-size: 11px; letter-spacing: .04em; }
+    .command-copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.2; }
+    .command-card .btn { flex: 0 0 auto; }
+
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .chart-card { min-width: 0; padding: 12px 12px 8px; border-radius: 12px; }
+    .chart-card.wide { grid-column: 1 / -1; }
+    .chart-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+    .chart-heading h2 { margin: 0; color: #cfe0eb; font-size: 10px; line-height: 1.2; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .chart-heading span { color: var(--muted); font: 9px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; }
+    .chart-wrap { position: relative; height: 112px; }
+    .chart-card.wide .chart-wrap { height: 100px; }
+    canvas.chart { display: block; width: 100%; height: 100%; }
+    .axis-note { margin-top: 2px; color: #71899d; font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .footer { display: flex; justify-content: space-between; gap: 12px; margin: 16px 1px 2px; color: #5f788d; font: 10px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .04em; }
+    .footer b { color: #809aaf; }
+
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: minmax(0, 1.2fr) minmax(320px, .9fr); }
+      .connection-strip { gap: 6px; }
+      .url-input { width: 185px; }
+    }
+    @media (max-width: 860px) {
+      .topbar { flex-wrap: wrap; }
+      .connection-strip { width: 100%; margin-left: 0; }
+      .url-input { flex: 1; width: auto; }
+      .layout { grid-template-columns: 1fr; }
+      .scene-panel, #sceneCanvas { min-height: 490px; }
+      .right-column { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+      .status-card, .command-card { grid-column: 1 / -1; }
+    }
+    @media (max-width: 570px) {
+      .app-shell { padding: 12px; }
+      .topbar { gap: 12px; padding-bottom: 13px; }
+      .connection-strip { flex-wrap: wrap; }
+      .connection-strip label { width: 100%; }
+      .url-input { flex: 1 1 180px; }
+      .connection-strip .btn { flex: 0 0 auto; }
+      .scene-panel, #sceneCanvas { min-height: 430px; }
+      .scene-footer { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .right-column { display: flex; }
+      .chart-grid { grid-template-columns: 1fr; }
+      .chart-card.wide { grid-column: auto; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+      .footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="RescueSense survivor signal console">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div>
+          <h1>RESCUE<span style="color: var(--cyan)">SENSE</span></h1>
+          <p>WIFI CSI · LIVE RF OBSERVATORY</p>
+        </div>
+      </div>
+      <div class="connection-strip">
+        <label for="wsUrl">TELEMETRY</label>
+        <input id="wsUrl" class="url-input" type="text" spellcheck="false" aria-label="WebSocket telemetry address">
+        <button id="connectButton" class="btn btn-primary" type="button">Connect</button>
+        <button id="demoButton" class="btn" type="button" aria-pressed="true">Demo stream</button>
+      </div>
+    </header>
+
+    <section class="layout" aria-label="RescueSense monitoring dashboard">
+      <section id="scenePanel" class="scene-panel" aria-label="Three-dimensional detection scene">
+        <canvas id="sceneCanvas" aria-label="3D diagram with ESP32 receiver, range rings, illustrative obstacle, and a calibrated target marker"></canvas>
+        <div class="scene-topline">
+          <div>
+            <div class="eyebrow">WiFi CSI / RF observatory</div>
+            <div class="scene-title">Live breathing-motion projection</div>
+          </div>
+          <div id="sceneChip" class="scene-chip">DEMO ESTIMATE</div>
+        </div>
+        <div class="scene-footer">
+          <div class="legend" aria-label="3D scene legend">
+            <span class="esp"><i></i>ESP32-S3 CSI receiver</span>
+            <span class="wall"><i></i>Live RF field</span>
+            <span class="target"><i></i>CSI motion candidate</span>
+          </div>
+          <div>DRAG TO ORBIT · SCROLL TO ZOOM</div>
+        </div>
+        <div class="flash-overlay" aria-hidden="true"></div>
+      </section>
+
+      <aside class="right-column" aria-label="Live signal metrics">
+        <section class="card status-card">
+          <div class="status-head">
+            <div>
+              <div class="status-kicker">Occupancy classification</div>
+              <div id="presenceBadge" class="badge present" aria-live="polite">BREATHING DETECTED</div>
+            </div>
+            <div class="source-state"><span id="sourceDot" class="source-dot"></span><span id="sourceText">DEMO STREAM</span><br><span id="updatedAt">updating now</span></div>
+          </div>
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-label">Breathing rate</div>
+              <div class="bpm"><strong id="bpmValue">16.2</strong><span>BPM</span></div>
+              <div class="confidence-bar" role="progressbar" aria-label="Detection confidence" aria-valuemin="0" aria-valuemax="100" aria-valuenow="78"><span id="confidenceBar"></span></div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Confidence</div>
+              <div class="metric-value"><span id="confidenceValue">78</span><small>%</small></div>
+              <div class="metric-label" style="margin-top: 15px">RSSI</div>
+              <div class="metric-value"><span id="rssiValue">−47</span><small>dBm</small></div>
+            </div>
+          </div>
+          <div class="proximity-row">
+            <div class="small-metric">
+              <div class="metric-label">Estimated proximity</div>
+              <div class="metric-value"><span id="distanceValue">—</span><small>m</small></div>
+            </div>
+            <div class="small-metric">
+              <div class="metric-label">Uncertainty range</div>
+              <div id="rangeValue" class="metric-value"><span>calibration required</span></div>
+            </div>
+          </div>
+          <p id="statusMessage" class="status-message"><strong>Likely breathing motion.</strong> Confidence clears the empty-room baseline.</p>
+        </section>
+
+        <section class="card command-card" aria-label="Alert command">
+          <div class="command-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+          </div>
+          <div class="command-copy"><b>ESP32 ALERT OUTPUT</b><span id="alertHint">Sends a buzzer command over WebSocket.</span></div>
+          <button id="alertButton" class="btn btn-alert" type="button">Send alert</button>
+        </section>
+
+        <section class="chart-grid" aria-label="Live CSI signal charts">
+          <section class="chart-card">
+            <div class="chart-heading"><h2>CSI amplitude</h2><span id="rawWindow">30 s window</span></div>
+            <div class="chart-wrap"><canvas id="rawChart" class="chart" role="img" aria-label="Live normalized CSI amplitude waveform"></canvas></div>
+            <div class="axis-note">NORMALIZED SUBCARRIER ENERGY</div>
+          </section>
+          <section class="chart-card">
+            <div class="chart-heading"><h2>Breathing band</h2><span>0.1–0.5 Hz</span></div>
+            <div class="chart-wrap"><canvas id="filteredChart" class="chart" role="img" aria-label="Filtered breathing waveform"></canvas></div>
+            <div class="axis-note">BUTTERWORTH + PCA</div>
+          </section>
+          <section class="chart-card wide">
+            <div class="chart-heading"><h2>Breathing spectrum</h2><span id="peakLabel">peak 0.27 Hz</span></div>
+            <div class="chart-wrap"><canvas id="spectrumChart" class="chart" role="img" aria-label="Breathing band spectrum and peak"></canvas></div>
+            <div class="axis-note">FREQUENCY [Hz] · PEAK USED FOR BPM ESTIMATE</div>
+          </section>
+        </section>
+      </aside>
+    </section>
+
+    <footer class="footer">
+      <span><b>METHOD:</b> CSI amplitude → PCA → 0.1–0.5 Hz band → spectral peak</span>
+      <span id="transportText">WebSocket ready · demo fallback active</span>
+    </footer>
+  </main>
+
+  <script>
+  (() => {
+    'use strict';
+
+    const byId = (id) => document.getElementById(id);
+    const els = {
+      scenePanel: byId('scenePanel'), sceneCanvas: byId('sceneCanvas'), sceneChip: byId('sceneChip'),
+      wsUrl: byId('wsUrl'), connectButton: byId('connectButton'), demoButton: byId('demoButton'),
+      presenceBadge: byId('presenceBadge'), bpmValue: byId('bpmValue'), confidenceValue: byId('confidenceValue'),
+      confidenceBar: byId('confidenceBar'), distanceValue: byId('distanceValue'), rangeValue: byId('rangeValue'),
+      rssiValue: byId('rssiValue'), statusMessage: byId('statusMessage'), sourceDot: byId('sourceDot'),
+      sourceText: byId('sourceText'), updatedAt: byId('updatedAt'), alertButton: byId('alertButton'),
+      alertHint: byId('alertHint'), rawChart: byId('rawChart'), filteredChart: byId('filteredChart'), spectrumChart: byId('spectrumChart'),
+      rawWindow: byId('rawWindow'), peakLabel: byId('peakLabel'), transportText: byId('transportText')
+    };
+
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    const numeric = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const optionalNumber = (value) => {
+      if (value === null || value === undefined || value === '') return null;
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    };
+    const initialHost = window.location.hostname || '127.0.0.1';
+    const socketScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    els.wsUrl.value = `${socketScheme}://${initialHost}:8000/ws`;
+
+    const state = {
+      presence: false,
+      bpm: 0,
+      bpmStable: false,
+      confidence: 0,
+      distance: 3.1,
+      uncertainty: .7,
+      distanceKnown: false,
+      distanceCalibrated: false,
+      rssi: NaN,
+      raw: [],
+      filtered: [],
+      spectrum: [],
+      timestamp: Date.now(),
+      live: false,
+      alerting: false,
+      demo: false,
+      lastTelemetryAt: 0
+    };
+
+    // Empirically, a real single-link CSI capture has a much lower spectral
+    // peak ratio than the ideal simulator.  The backend's `presence` decision
+    // remains authoritative; this only controls when the dashboard changes
+    // from amber to green.  It is intentionally labelled "breathing-like",
+    // not medical/identity-confirmed breathing.
+    const SIGNAL_CUE_CONFIDENCE = .30;
+
+    let socket = null;
+    let demoTimer = null;
+
+    function createWave(length, phase, breathingHz, present) {
+      const raw = [], filtered = [];
+      for (let i = 0; i < length; i++) {
+        const seconds = (i - length) / 6;
+        const breath = Math.sin(2 * Math.PI * breathingHz * seconds + phase);
+        const harmonic = .20 * Math.sin(2 * Math.PI * breathingHz * 2 * seconds + phase * .65);
+        const randomish = .14 * Math.sin(i * 1.81 + phase * 3.1) + .07 * Math.sin(i * .37 - phase);
+        const drift = .12 * Math.sin(i * .038 + phase * .4);
+        const gain = present ? 1 : .12;
+        filtered.push(gain * (breath + harmonic));
+        raw.push(gain * (breath + harmonic + randomish) + drift + (present ? .04 : .22) * Math.sin(i * 2.9 + phase));
+      }
+      return { raw, filtered };
+    }
+
+    function createSpectrum(breathingHz, present, phase) {
+      const rows = [];
+      for (let i = 0; i < 56; i++) {
+        const frequency = .1 + (i / 55) * .4;
+        const peak = Math.exp(-Math.pow((frequency - breathingHz) / .026, 2));
+        const shoulder = .25 * Math.exp(-Math.pow((frequency - breathingHz * 1.85) / .04, 2));
+        const texture = .035 + .04 * (Math.sin(i * 2.6 + phase) + 1) / 2;
+        rows.push({ x: frequency, y: texture + (present ? .92 * peak + shoulder : .05 * peak) });
+      }
+      return rows;
+    }
+
+    function generateDemo() {
+      const now = Date.now();
+      const t = now / 1000;
+      const cycle = t % 42;
+      const present = cycle < 32;
+      const breathingHz = .27 + .012 * Math.sin(t / 7);
+      const bpm = present ? breathingHz * 60 : 0;
+      const confidence = present ? .76 + .13 * Math.sin(t / 5) : .12 + .08 * Math.sin(t);
+      const wave = createWave(180, t * .42, breathingHz, present);
+      applyTelemetry({
+        presence: present,
+        bpm,
+        confidence,
+        distance_m: 3.05 + .28 * Math.sin(t / 8),
+        distance_uncertainty_m: .55 + .12 * (Math.sin(t / 4) + 1) / 2,
+        rssi: -47 + 2.4 * Math.sin(t / 10),
+        raw_waveform: wave.raw,
+        filtered_waveform: wave.filtered,
+        spectrum: createSpectrum(breathingHz, present, t),
+        _demo: true
+      });
+    }
+
+    function startDemo() {
+      state.demo = true;
+      if (demoTimer) return;
+      generateDemo();
+      demoTimer = window.setInterval(generateDemo, 1000);
+    }
+
+    function stopDemo() {
+      state.demo = false;
+      if (demoTimer) window.clearInterval(demoTimer);
+      demoTimer = null;
+    }
+
+    function asNumberArray(input) {
+      if (!Array.isArray(input)) return [];
+      return input.map((item) => {
+        if (Array.isArray(item)) return numeric(item[item.length - 1], NaN);
+        if (item && typeof item === 'object') return numeric(item.y ?? item.v ?? item.value ?? item.amplitude ?? item.power, NaN);
+        return numeric(item, NaN);
+      }).filter(Number.isFinite);
+    }
+
+    function normaliseSpectrum(input, fallbackHz) {
+      if (!Array.isArray(input) || !input.length) return state.demo ? createSpectrum(fallbackHz, state.presence, Date.now() / 1000) : [];
+      const values = input.map((item, index) => {
+        if (Array.isArray(item)) return { x: numeric(item[0], .1 + index * .4 / Math.max(input.length - 1, 1)), y: numeric(item[1], 0) };
+        if (item && typeof item === 'object') return { x: numeric(item.x ?? item.frequency ?? item.hz, .1 + index * .4 / Math.max(input.length - 1, 1)), y: numeric(item.y ?? item.value ?? item.power, 0) };
+        return { x: .1 + index * .4 / Math.max(input.length - 1, 1), y: numeric(item, 0) };
+      });
+      return values.filter((row) => Number.isFinite(row.x) && Number.isFinite(row.y));
+    }
+
+    function truthyPresence(value, confidence) {
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'string') return ['true', 'present', 'detected', 'yes', '1'].includes(value.toLowerCase());
+      if (Number.isFinite(Number(value))) return Number(value) > 0;
+      return confidence >= .45;
+    }
+
+    function applyTelemetry(payload) {
+      const data = payload && (payload.telemetry || payload.data || payload) || {};
+      const bpm = Math.max(0, numeric(data.bpm ?? data.breathing_bpm ?? data.breathing_rate, state.bpm));
+      const confidenceRaw = numeric(data.confidence ?? data.conf ?? data.peak_ratio, state.confidence);
+      const confidence = clamp(confidenceRaw > 1 ? confidenceRaw / 100 : confidenceRaw, 0, 1);
+      const presence = truthyPresence(data.presence ?? data.present ?? data.detected, confidence);
+      const reportedDistance = optionalNumber(data.distance_m ?? data.distance ?? data.proximity_m);
+      const distanceCalibrated = data._demo === true || data.distance_calibrated === true;
+      const distanceKnown = reportedDistance !== null && distanceCalibrated;
+      const distance = distanceKnown ? clamp(reportedDistance, 0, 5) : state.distance;
+      let uncertainty = distanceKnown
+        ? Math.abs(numeric(data.distance_uncertainty_m ?? data.distance_uncertainty ?? data.uncertainty_m, state.uncertainty))
+        : state.uncertainty;
+      const range = data.distance_range ?? data.proximity_range;
+      if (distanceKnown && Array.isArray(range) && range.length >= 2) uncertainty = Math.abs(numeric(range[1], distance) - numeric(range[0], distance)) / 2;
+      const raw = asNumberArray(data.raw_waveform ?? data.csi_waveform ?? data.raw ?? data.waveform);
+      const filtered = asNumberArray(data.filtered_waveform ?? data.breathing_waveform ?? data.filtered ?? data.pca_waveform);
+      const hz = bpm > 0 ? bpm / 60 : .27;
+      state.presence = presence;
+      state.bpm = bpm;
+      state.bpmStable = data.bpm_stable !== false;
+      state.confidence = confidence;
+      state.distance = distance;
+      state.uncertainty = clamp(uncertainty, .05, 2.5);
+      state.distanceKnown = distanceKnown;
+      state.distanceCalibrated = distanceCalibrated;
+      state.rssi = numeric(data.rssi, state.rssi);
+      state.raw = raw.length ? raw : state.raw;
+      state.filtered = filtered.length ? filtered : state.filtered;
+      state.spectrum = normaliseSpectrum(data.spectrum ?? data.spectrum_data ?? data.psd, hz);
+      state.timestamp = Date.now();
+      state.lastTelemetryAt = state.timestamp;
+      state.live = !data._demo;
+      // `--auto-alert` on the backend drives this field whenever presence
+      // changes, so the red visual alert stays synchronized with ESP32 GPIO.
+      if (typeof data.alert_active === 'boolean' && data.alert_active !== state.alerting) {
+        setAlert(data.alert_active, data.alert_active
+          ? 'Automatic survivor alert active: ESP32 buzzer commanded.'
+          : 'Automatic survivor alert cleared.');
+      }
+      if (state.live) {
+        stopDemo();
+        els.demoButton.setAttribute('aria-pressed', 'false');
+        els.demoButton.textContent = 'Start demo';
+      }
+      if (state.demo && (!state.raw.length || !state.filtered.length)) {
+        const fallback = createWave(180, state.timestamp / 2400, hz, presence);
+        state.raw = fallback.raw;
+        state.filtered = fallback.filtered;
+      }
+      renderTelemetry();
+    }
+
+    function renderTelemetry() {
+      const percent = Math.round(state.confidence * 100);
+      const rangeLo = Math.max(0, state.distance - state.uncertainty);
+      const rangeHi = Math.min(5, state.distance + state.uncertainty);
+      const isUncertain = state.presence && state.confidence < SIGNAL_CUE_CONFIDENCE;
+      const ratePending = state.presence && !state.bpmStable;
+      const hasProximity = state.presence && state.distanceKnown;
+      els.bpmValue.textContent = state.presence && state.bpm && state.bpmStable ? state.bpm.toFixed(1) : '—';
+      els.confidenceValue.textContent = percent;
+      els.confidenceBar.style.width = `${percent}%`;
+      els.confidenceBar.parentElement.setAttribute('aria-valuenow', String(percent));
+      els.distanceValue.textContent = hasProximity ? state.distance.toFixed(1) : '—';
+      els.rangeValue.innerHTML = hasProximity
+        ? `<span>${rangeLo.toFixed(1)}–${rangeHi.toFixed(1)}</span><small>m</small>`
+        : '<span>calibration required</span>';
+      els.rssiValue.textContent = Number.isFinite(state.rssi) ? Math.round(state.rssi).toLocaleString('en-US').replace('-', '−') : '—';
+      els.presenceBadge.className = `badge ${state.presence ? (isUncertain || ratePending ? 'uncertain' : 'present') : ''}`;
+      els.presenceBadge.textContent = state.presence ? (isUncertain || ratePending ? 'MOTION — VERIFY' : 'BREATHING-LIKE SIGNAL') : 'NO PRESENCE';
+      els.statusMessage.innerHTML = state.presence
+        ? (ratePending
+          ? '<strong>Periodic motion candidate found; rate is not stable yet.</strong> Keep the ESP32 and subject still for four consecutive one-second windows.'
+          : hasProximity
+          ? `<strong>${isUncertain ? 'Low-confidence breathing-like motion.' : 'Likely breathing motion.'}</strong> Estimated proximity is a calibrated signal-strength inference, not exact distance.`
+          : `<strong>${isUncertain ? 'Low-confidence breathing-like motion.' : 'Breathing-like motion candidate.'}</strong> One Wi-Fi link sees aggregate RF motion, not a people count or physical location. Calibrate this exact setup before showing proximity.`)
+        : (state.live
+          ? '<strong>No periodic presence signature above the current threshold.</strong> Keep the transmitter, ESP32, and subject still while the window refills.'
+          : state.demo
+          ? '<strong>Demonstration data only.</strong> Connect the backend for real CSI telemetry.'
+          : '<strong>No live CSI link.</strong> Start the backend, then click Connect.');
+      const source = state.live ? 'LIVE CSI' : (state.demo ? 'DEMO STREAM' : 'NO CSI LINK');
+      els.sourceText.textContent = source;
+      els.sourceDot.className = `source-dot ${state.live ? 'live' : (state.demo ? '' : 'offline')}`;
+      els.updatedAt.textContent = `updated ${new Date(state.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+      const sceneMode = state.live ? 'LIVE' : (state.demo ? 'DEMO' : 'OFFLINE');
+      els.sceneChip.textContent = `${sceneMode} · ${hasProximity ? 'TARGET LOCK' : (state.presence ? 'MOTION ONLY' : 'SCANNING')}`;
+      els.rawWindow.textContent = `${state.raw.length || 0} samples`;
+      els.peakLabel.textContent = state.presence && state.bpm ? `peak ${(state.bpm / 60).toFixed(2)} Hz` : 'no dominant peak';
+      updateTargetLabel();
+      drawLineChart(els.rawChart, state.raw, { color: '#5cf3e5', label: 'CSI' });
+      drawLineChart(els.filteredChart, state.filtered, { color: '#a8ff6a', label: 'PCA' });
+      drawSpectrum(els.spectrumChart, state.spectrum, state.bpm / 60, state.presence);
+    }
+
+    function chartContext(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(1, Math.round(rect.width * ratio));
+      const height = Math.max(1, Math.round(rect.height * ratio));
+      if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      return { ctx, width: rect.width, height: rect.height };
+    }
+
+    function grid(ctx, width, height, left, right, top, bottom) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(137, 176, 201, .12)';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 4; i++) {
+        const y = top + (height - top - bottom) * i / 4;
+        ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke();
+      }
+      for (let i = 1; i < 5; i++) {
+        const x = left + (width - left - right) * i / 5;
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, height - bottom); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawLineChart(canvas, values, options) {
+      const { ctx, width, height } = chartContext(canvas);
+      ctx.clearRect(0, 0, width, height);
+      const left = 6, right = 5, top = 7, bottom = 15;
+      grid(ctx, width, height, left, right, top, bottom);
+      if (!values || values.length < 2) return;
+      const min = Math.min(...values), max = Math.max(...values);
+      const pad = Math.max((max - min) * .15, .1);
+      const lo = min - pad, hi = max + pad;
+      const xAt = (i) => left + (width - left - right) * i / (values.length - 1);
+      const yAt = (v) => top + (height - top - bottom) * (1 - (v - lo) / (hi - lo || 1));
+      if (lo < 0 && hi > 0) {
+        ctx.strokeStyle = 'rgba(225, 240, 250, .21)';
+        ctx.beginPath(); ctx.moveTo(left, yAt(0)); ctx.lineTo(width - right, yAt(0)); ctx.stroke();
+      }
+      ctx.beginPath();
+      values.forEach((value, index) => index ? ctx.lineTo(xAt(index), yAt(value)) : ctx.moveTo(xAt(index), yAt(value)));
+      ctx.lineTo(xAt(values.length - 1), height - bottom); ctx.lineTo(xAt(0), height - bottom); ctx.closePath();
+      const gradient = ctx.createLinearGradient(0, top, 0, height - bottom);
+      gradient.addColorStop(0, options.color.replace(')', ', .28)').replace('rgb', 'rgba'));
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      // Explicit alpha fallback for hex colors.
+      gradient.addColorStop(0, options.color === '#5cf3e5' ? 'rgba(92,243,229,.19)' : 'rgba(168,255,106,.16)');
+      ctx.fillStyle = gradient; ctx.fill();
+      ctx.beginPath();
+      values.forEach((value, index) => index ? ctx.lineTo(xAt(index), yAt(value)) : ctx.moveTo(xAt(index), yAt(value)));
+      ctx.strokeStyle = options.color; ctx.lineWidth = 1.6; ctx.shadowColor = options.color; ctx.shadowBlur = 7; ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(127, 156, 174, .8)'; ctx.font = '9px ui-monospace, monospace';
+      ctx.fillText('−30s', left, height - 3); ctx.fillText('now', Math.max(left, width - 24), height - 3);
+    }
+
+    function drawSpectrum(canvas, data, peakHz, present) {
+      const { ctx, width, height } = chartContext(canvas);
+      ctx.clearRect(0, 0, width, height);
+      const left = 7, right = 6, top = 7, bottom = 17;
+      grid(ctx, width, height, left, right, top, bottom);
+      if (!data || data.length < 2) return;
+      const minX = .1, maxX = .5;
+      const maxY = Math.max(.12, ...data.map((row) => row.y)) * 1.15;
+      const xAt = (v) => left + (width - left - right) * (v - minX) / (maxX - minX);
+      const yAt = (v) => top + (height - top - bottom) * (1 - v / maxY);
+      ctx.beginPath();
+      data.forEach((row, index) => index ? ctx.lineTo(xAt(row.x), yAt(row.y)) : ctx.moveTo(xAt(row.x), yAt(row.y)));
+      ctx.lineTo(xAt(data[data.length - 1].x), height - bottom); ctx.lineTo(xAt(data[0].x), height - bottom); ctx.closePath();
+      const gradient = ctx.createLinearGradient(0, top, 0, height - bottom);
+      gradient.addColorStop(0, present ? 'rgba(100,168,255,.28)' : 'rgba(127,148,164,.13)'); gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gradient; ctx.fill();
+      ctx.beginPath();
+      data.forEach((row, index) => index ? ctx.lineTo(xAt(row.x), yAt(row.y)) : ctx.moveTo(xAt(row.x), yAt(row.y)));
+      ctx.strokeStyle = present ? '#64a8ff' : '#8296a5'; ctx.lineWidth = 1.7; ctx.shadowColor = '#64a8ff'; ctx.shadowBlur = present ? 7 : 0; ctx.stroke(); ctx.shadowBlur = 0;
+      if (present && peakHz >= minX && peakHz <= maxX) {
+        const peak = data.reduce((best, row) => Math.abs(row.x - peakHz) < Math.abs(best.x - peakHz) ? row : best, data[0]);
+        const x = xAt(peak.x), y = yAt(peak.y);
+        ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(168,255,106,.75)'; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, height - bottom); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#a8ff6a'; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(127, 156, 174, .8)'; ctx.font = '9px ui-monospace, monospace';
+      ['0.1', '0.3', '0.5'].forEach((label) => { const x = xAt(Number(label)); ctx.fillText(label, x - 7, height - 3); });
+    }
+
+    function sendMessage(body) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(body));
+        return true;
+      }
+      return false;
+    }
+
+    function setAlert(active, feedback) {
+      state.alerting = active;
+      els.scenePanel.classList.toggle('alerting', active);
+      els.alertButton.classList.toggle('active', active);
+      els.alertButton.textContent = active ? 'Stop alert' : 'Send alert';
+      els.alertHint.textContent = feedback || (active ? 'Alert command issued: buzzer active.' : 'Sends a buzzer command over WebSocket.');
+    }
+
+    function toggleAlert() {
+      const wanted = !state.alerting;
+      const delivered = sendMessage({ type: 'alert', active: wanted });
+      setAlert(wanted, delivered ? (wanted ? 'Alert command issued: buzzer active.' : 'Alert clear command issued.') : (wanted ? 'Demo alert active — connect to send GPIO command.' : 'Demo alert cleared.'));
+    }
+
+    function connectionState(label, status) {
+      els.transportText.textContent = label;
+      els.connectButton.textContent = status === 'open' ? 'Reconnect' : 'Connect';
+      if (status === 'open') {
+        els.sourceDot.className = 'source-dot live';
+      } else if (!state.demo) {
+        els.sourceDot.className = 'source-dot offline';
+      }
+    }
+
+    function connect() {
+      let address = els.wsUrl.value.trim();
+      if (!address) address = `${socketScheme}://${initialHost}:8000/ws`;
+      if (!/^wss?:\/\//i.test(address)) address = `${socketScheme}://${address.replace(/^\/+/, '')}`;
+      els.wsUrl.value = address;
+      if (socket) { try { socket.close(); } catch (_) {} }
+      connectionState('Connecting to CSI backend…', 'connecting');
+      try {
+        socket = new WebSocket(address);
+        socket.onopen = () => {
+          connectionState('WebSocket connected · waiting for CSI telemetry', 'open');
+          sendMessage({ type: 'dashboard_hello', client: 'rescuesense-dashboard' });
+        };
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && (data.type === 'alert_ack' || data.type === 'command_ack')) {
+              if (typeof data.active === 'boolean') setAlert(data.active, data.message || undefined);
+              return;
+            }
+            applyTelemetry(data);
+            connectionState('WebSocket connected · live CSI telemetry', 'open');
+          } catch (_) {
+            // The dashboard intentionally ignores non-JSON serial/debug messages.
+          }
+        };
+        socket.onerror = () => connectionState('WebSocket unavailable · no telemetry', 'error');
+        socket.onclose = () => {
+          socket = null;
+          state.live = false;
+          connectionState('WebSocket disconnected · telemetry paused', 'closed');
+          renderTelemetry();
+        };
+      } catch (_) {
+        connectionState('WebSocket unavailable · no telemetry', 'error');
+      }
+    }
+
+    els.connectButton.addEventListener('click', connect);
+    els.wsUrl.addEventListener('keydown', (event) => { if (event.key === 'Enter') connect(); });
+    els.demoButton.addEventListener('click', () => {
+      if (state.demo) {
+        stopDemo();
+        els.demoButton.setAttribute('aria-pressed', 'false');
+        els.demoButton.textContent = 'Start demo';
+        els.transportText.textContent = 'Demo stream paused · connect to receive telemetry';
+      } else {
+        startDemo();
+        els.demoButton.setAttribute('aria-pressed', 'true');
+        els.demoButton.textContent = 'Demo stream';
+        els.transportText.textContent = 'Demo telemetry stream active';
+      }
+    });
+    els.alertButton.addEventListener('click', toggleAlert);
+
+    // --- Three.js spatial scene -------------------------------------------------
+    let renderer, scene, camera, controls, human, humanGlow, chest, targetLight, signalPulse, led, targetLabel;
+    let rfWaves;
+    let lastLabelKey = '';
+    const targetPosition = new THREE.Vector3(3.1, 0, 0);
+    const tempVec = new THREE.Vector3();
+
+    function makeMaterial(color, opacity = 1, emissive = null) {
+      return new THREE.MeshStandardMaterial({
+        color, roughness: .65, metalness: .12, transparent: opacity < 1, opacity,
+        emissive: emissive || 0x000000, emissiveIntensity: emissive ? .45 : 0
+      });
+    }
+
+    function makeWireMaterial(color, opacity = 1) {
+      return new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: opacity < 1, opacity, depthWrite: false });
+    }
+
+    function makeTargetLabel() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640; canvas.height = 176;
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+      sprite.scale.set(2.9, .8, 1);
+      sprite.position.set(0, 3.15, 0);
+      sprite.userData.canvas = canvas;
+      sprite.userData.texture = texture;
+      return sprite;
+    }
+
+    function updateTargetLabel() {
+      if (!targetLabel) return;
+      const bpm = state.bpm > 0 ? `${state.bpm.toFixed(1)} BPM` : 'NO PEAK';
+      const confidence = `${Math.round(state.confidence * 100)}% CONFIDENCE`;
+      const location = state.distanceKnown ? `${state.distance.toFixed(1)} m EST. PROXIMITY` : 'POSITION NOT CALIBRATED';
+      const title = !state.presence
+        ? 'RF PROJECTION — BELOW PRESENCE THRESHOLD'
+        : (state.confidence < SIGNAL_CUE_CONFIDENCE ? 'CSI MOTION CANDIDATE' : 'BREATHING-LIKE CSI CANDIDATE');
+      const key = `${title}|${bpm}|${confidence}|${location}`;
+      if (key === lastLabelKey) return;
+      lastLabelKey = key;
+      const canvas = targetLabel.userData.canvas;
+      const context = canvas.getContext('2d');
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = 'rgba(4, 14, 24, .88)';
+      context.strokeStyle = state.confidence < SIGNAL_CUE_CONFIDENCE ? 'rgba(255, 181, 91, .92)' : 'rgba(168, 255, 106, .92)';
+      context.lineWidth = 3;
+      context.beginPath(); context.roundRect(8, 8, canvas.width - 16, canvas.height - 16, 18); context.fill(); context.stroke();
+      context.fillStyle = state.confidence < SIGNAL_CUE_CONFIDENCE ? '#ffd291' : '#cfffaf';
+      context.font = '700 26px ui-monospace, Menlo, Consolas, monospace';
+      context.fillText(title, 32, 48);
+      context.fillStyle = '#f5fbff';
+      context.font = '800 47px ui-monospace, Menlo, Consolas, monospace';
+      context.fillText(bpm, 32, 105);
+      context.fillStyle = '#8fb2c5';
+      context.font = '600 20px ui-monospace, Menlo, Consolas, monospace';
+      context.fillText(`${confidence}  ·  ${location}`, 32, 143);
+      targetLabel.userData.texture.needsUpdate = true;
+    }
+
+    function addRangeRings() {
+      for (let radius = 1; radius <= 5; radius++) {
+        const segments = 96, vertices = [];
+        for (let i = 0; i <= segments; i++) {
+          const a = i / segments * Math.PI * 2;
+          vertices.push(Math.cos(a) * radius, .017, Math.sin(a) * radius);
+        }
+        const geometry = new THREE.BufferGeometry().setFromPoints(vertices.map((v, index) => index % 3 === 0 ? new THREE.Vector3(v, vertices[index + 1], vertices[index + 2]) : null).filter(Boolean));
+        const material = new THREE.LineBasicMaterial({ color: radius === 5 ? 0x345166 : 0x2b5568, transparent: true, opacity: radius === 5 ? .42 : .26 });
+        scene.add(new THREE.Line(geometry, material));
+      }
+    }
+
+    function addReceiver() {
+      const group = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(.34, .42, .12, 32), makeMaterial(0x183c4b, 1, 0x0b3335));
+      base.position.y = .08; group.add(base);
+      const board = new THREE.Mesh(new THREE.BoxGeometry(.58, .07, .4), makeMaterial(0x15625e, 1, 0x0b3631));
+      board.position.y = .18; group.add(board);
+      const antennaMat = makeMaterial(0x99c6d0, .85, 0x16414a);
+      [-.2, .2].forEach((x) => { const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, .64, 10), antennaMat); antenna.position.set(x, .53, -.1); antenna.rotation.z = x * .36; group.add(antenna); });
+      led = new THREE.Mesh(new THREE.SphereGeometry(.045, 12, 12), new THREE.MeshBasicMaterial({ color: 0x5cf3e5 }));
+      led.position.set(.08, .235, -.225); group.add(led);
+      const rxLight = new THREE.PointLight(0x3cffee, .65, 3); rxLight.position.set(0, .8, 0); group.add(rxLight);
+      scene.add(group);
+    }
+
+    function addWall() {
+      wallGroup = new THREE.Group();
+      const wallMat = makeMaterial(0x46535f, 1);
+      const dustMat = makeMaterial(0x6f665c, 1);
+      const blockSpecs = [
+        [-.65, .52, -.05, .86, .78, .28], [-.12, .58, -.08, .49, 1.05, .32], [.36, .43, -.06, .55, .76, .32],
+        [.79, .34, -.04, .29, .56, .28], [-.45, 1.21, -.07, .52, .55, .28], [.2, 1.34, -.06, .58, .45, .28],
+        [-.04, 1.84, -.08, .45, .42, .27]
+      ];
+      blockSpecs.forEach((spec, index) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(spec[3], spec[4], spec[5]), index % 3 ? wallMat : dustMat);
+        mesh.position.set(spec[0], spec[1], spec[2]); mesh.rotation.set(0, (index - 2) * .06, (index % 2 ? 1 : -1) * .045); wallGroup.add(mesh);
+      });
+      for (let i = 0; i < 15; i++) {
+        const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(.08 + (i % 3) * .035, 0), i % 4 ? wallMat : dustMat);
+        stone.position.set(-.95 + (i * .257 % 1.9), .08 + (i % 2) * .05, -.24 + (i * .173 % .42));
+        stone.rotation.set(i, i * .4, i * .2); wallGroup.add(stone);
+      }
+      wallGroup.position.set(1.58, 0, 0); scene.add(wallGroup);
+    }
+
+    function addHuman() {
+      human = new THREE.Group();
+      const wire = makeWireMaterial(0x9fffd0, .95);
+      const faintWire = makeWireMaterial(0x3ad6d4, .34);
+      const points = [
+        [0, 2.34, 0], [0, 2.03, 0], [-.39, 1.86, 0], [.39, 1.86, 0],
+        [-.64, 1.45, 0], [.64, 1.45, 0], [0, 1.55, 0], [0, 1.03, 0],
+        [-.24, 1.0, 0], [.24, 1.0, 0], [-.28, .44, 0], [.28, .44, 0],
+        [-.30, .06, .04], [.30, .06, .04]
+      ];
+      const links = [[0,1],[1,2],[1,3],[2,4],[3,5],[1,6],[6,7],[7,8],[7,9],[8,10],[9,11],[10,12],[11,13]];
+      const boneVertices = [];
+      links.forEach(([from, to]) => boneVertices.push(...points[from], ...points[to]));
+      const bones = new THREE.LineSegments(
+        new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(boneVertices, 3)),
+        new THREE.LineBasicMaterial({ color: 0x73ffe5, transparent: true, opacity: .9 })
+      );
+      human.add(bones);
+      const joints = new THREE.Points(
+        new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(points.flat(), 3)),
+        new THREE.PointsMaterial({ color: 0xc7ff9b, size: .115, sizeAttenuation: true, transparent: true, opacity: .95 })
+      );
+      human.add(joints);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(.27, 18, 14), wire); head.position.y = 2.34; human.add(head);
+      chest = new THREE.Mesh(new THREE.SphereGeometry(.43, 20, 14), wire); chest.scale.set(1, 1.15, .56); chest.position.y = 1.58; human.add(chest);
+      const torso = new THREE.Mesh(new THREE.ConeGeometry(.42, .58, 7, 1, true), faintWire); torso.position.y = 1.28; torso.rotation.x = Math.PI; human.add(torso);
+      humanGlow = new THREE.Mesh(new THREE.SphereGeometry(1.04, 32, 20), new THREE.MeshBasicMaterial({ color: 0x52f7dd, transparent: true, opacity: .07, depthWrite: false }));
+      humanGlow.position.y = 1.3; human.add(humanGlow);
+      targetLight = new THREE.PointLight(0x70ffe8, .95, 4.5); targetLight.position.y = 1.65; human.add(targetLight);
+      targetLabel = makeTargetLabel(); human.add(targetLabel); updateTargetLabel();
+      human.position.copy(targetPosition); scene.add(human);
+    }
+
+    function addSignalPath() {
+      const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, .25, 0), new THREE.Vector3(3.1, 1.2, 0)]);
+      const line = new THREE.Line(geometry, new THREE.LineDashedMaterial({ color: 0x5cf3e5, dashSize: .16, gapSize: .1, transparent: true, opacity: .6 }));
+      line.computeLineDistances(); line.name = 'signal-line'; scene.add(line);
+      signalPulse = new THREE.Mesh(new THREE.SphereGeometry(.07, 16, 16), new THREE.MeshBasicMaterial({ color: 0x5cf3e5, transparent: true, opacity: .9 }));
+      scene.add(signalPulse);
+    }
+
+    function addRFField() {
+      rfWaves = new THREE.Group();
+      for (let index = 0; index < 6; index++) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(.4 + index * .18, .012, 8, 64),
+          new THREE.MeshBasicMaterial({ color: index % 2 ? 0x50c8ff : 0x5cf3e5, transparent: true, opacity: .2, depthWrite: false })
+        );
+        ring.rotation.y = Math.PI / 2;
+        ring.position.set(0, .58, 0);
+        ring.userData.phase = index / 6;
+        rfWaves.add(ring);
+      }
+      const fieldLight = new THREE.PointLight(0x2fb7d8, .4, 4); fieldLight.position.set(0, .7, 0); rfWaves.add(fieldLight);
+      scene.add(rfWaves);
+    }
+
+    function updateSignalPath() {
+      const line = scene.getObjectByName('signal-line');
+      if (!line) return;
+      const attr = line.geometry.getAttribute('position');
+      attr.setXYZ(1, human.position.x, 1.2, human.position.z); attr.needsUpdate = true;
+      line.geometry.computeBoundingSphere(); line.computeLineDistances();
+    }
+
+    function initScene() {
+      if (!window.THREE) return;
+      renderer = new THREE.WebGLRenderer({ canvas: els.sceneCanvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(els.sceneCanvas.clientWidth, els.sceneCanvas.clientHeight, false);
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x08131f, .075);
+      camera = new THREE.PerspectiveCamera(44, Math.max(1, els.sceneCanvas.clientWidth) / Math.max(1, els.sceneCanvas.clientHeight), .1, 50);
+      camera.position.set(7.3, 5.7, 8.4);
+      controls = new THREE.OrbitControls(camera, els.sceneCanvas);
+      controls.target.set(2, 1.05, 0); controls.minDistance = 4.5; controls.maxDistance = 15; controls.maxPolarAngle = Math.PI * .48; controls.enableDamping = true; controls.dampingFactor = .07;
+      scene.add(new THREE.HemisphereLight(0x78b7da, 0x051018, 1.35));
+      const key = new THREE.DirectionalLight(0xbedaff, 1); key.position.set(4, 7, 4); scene.add(key);
+      const floor = new THREE.Mesh(new THREE.CircleGeometry(7, 80), new THREE.MeshStandardMaterial({ color: 0x0b1b29, roughness: .93, metalness: .05, transparent: true, opacity: .92 }));
+      floor.rotation.x = -Math.PI / 2; floor.position.y = -.035; scene.add(floor);
+      const grid = new THREE.GridHelper(12, 24, 0x25536b, 0x163447); grid.position.y = -.02; grid.material.transparent = true; grid.material.opacity = .42; scene.add(grid);
+      addRangeRings(); addReceiver(); addRFField(); addHuman(); addSignalPath();
+      const resize = () => {
+        const width = els.sceneCanvas.clientWidth, height = els.sceneCanvas.clientHeight;
+        if (!width || !height) return;
+        renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix();
+      };
+      new ResizeObserver(resize).observe(els.scenePanel);
+      animateScene();
+    }
+
+    function animateScene() {
+      requestAnimationFrame(animateScene);
+      const time = performance.now() / 1000;
+      if (human) {
+        const displayDistance = state.distanceKnown ? state.distance : 4.65;
+        targetPosition.set(displayDistance, 0, .08 * Math.sin(time * .3));
+        human.position.lerp(targetPosition, .045);
+        // A valid periodic CSI component can be visualised as an RF projection
+        // before it clears the conservative presence threshold.  The label
+        // makes that state explicit rather than presenting it as a detection.
+        const targetVisible = state.presence || (state.live && state.bpm > 0 && state.confidence > .05);
+        const breathPhase = targetVisible && state.bpm > 0 ? Math.sin(time * 2 * Math.PI * state.bpm / 60) : 0;
+        const pulse = targetVisible ? 1 + .052 * Math.max(0, breathPhase) : .88;
+        chest.scale.set(pulse, 1.24 * pulse, .62 * pulse);
+        // A deliberately subtle body projection: chest expansion follows the
+        // respiration-band component and the torso sway is confidence-scaled.
+        // It is a live signal visual, not a claimed pose reconstruction.
+        const sway = targetVisible ? .045 * Math.sin(time * 2 * Math.PI * Math.max(.08, state.bpm / 60) * .5) * (.35 + state.confidence) : 0;
+        human.rotation.z = sway;
+        human.rotation.y = targetVisible ? .065 * Math.sin(time * .62) * (.25 + state.confidence) : 0;
+        human.position.y = targetVisible ? .018 * Math.max(0, breathPhase) : 0;
+        humanGlow.scale.setScalar(targetVisible ? 1 + .1 * Math.max(0, breathPhase) : .62);
+        humanGlow.material.opacity = targetVisible ? .07 + .05 * Math.max(0, breathPhase) : .015;
+        targetLight.intensity = targetVisible ? .55 + .45 * Math.max(0, breathPhase) : .08;
+        human.visible = targetVisible;
+        if (targetLabel) targetLabel.visible = targetVisible;
+        updateSignalPath();
+      }
+      if (signalPulse && human) {
+        signalPulse.visible = human.visible;
+        const phase = (time * .45) % 1;
+        tempVec.set(0, .25, 0).lerp(new THREE.Vector3(human.position.x, 1.2, human.position.z), phase);
+        signalPulse.position.copy(tempVec); signalPulse.scale.setScalar(.72 + .42 * Math.sin(phase * Math.PI));
+      }
+      if (rfWaves) {
+        rfWaves.children.forEach((wave) => {
+          if (!wave.isMesh) return;
+          const phase = (time * (.22 + state.confidence * .24) + wave.userData.phase) % 1;
+          const scale = .65 + phase * 1.15;
+          wave.scale.setScalar(scale);
+          wave.material.opacity = .03 + .24 * (1 - phase) * (.28 + state.confidence);
+        });
+      }
+      if (led) { const s = .8 + .3 * Math.sin(time * 5); led.scale.setScalar(s); }
+      if (controls) { controls.target.lerp(new THREE.Vector3(Math.min(2.5, (state.distanceKnown ? state.distance : 3) * .48), 1.05, 0), .013); controls.update(); }
+      if (renderer && scene && camera) renderer.render(scene, camera);
+    }
+
+    const chartResize = () => renderTelemetry();
+    new ResizeObserver(chartResize).observe(document.querySelector('.chart-grid'));
+    window.addEventListener('resize', chartResize);
+    initScene();
+    renderTelemetry();
+    // Live hardware is attempted automatically; simulation is only started by
+    // an explicit press of the Demo button.
+    window.setTimeout(connect, 250);
+  })();
+  </script>
+</body>
+</html>
