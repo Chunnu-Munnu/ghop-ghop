@@ -2,7 +2,7 @@
 
 | Symptom | Likely cause | Fast fix | Preserve for demo |
 | --- | --- | --- | --- |
-| No `CSI,` lines | CSI not enabled, incorrect Wi-Fi SSID/password, AP unavailable, serial monitor owns port | Verify the router is 2.4 GHz; re-enter credentials in `idf.py menuconfig → Example Connection Configuration`; confirm `CONFIG_ESP_WIFI_CSI_ENABLED=y`; close `idf.py monitor`, then use backend as sole serial reader | Use `--simulate` only as a clearly labelled fallback |
+| No `CSI,` lines | CSI not enabled, wrong Wi-Fi SSID/password, AP unavailable, serial monitor owns port | Verify the router is 2.4 GHz; fix credentials in `firmware\sdkconfig.wifi` and re-flash; the dashboard shows the board's own `#WIFI` reason (e.g. "network not found", "wrong password?"); close the monitor, then let the backend own the port | Use `-Simulate` only as a clearly labelled fallback |
 | CSI rate below 80 Hz | Hotspot/router rate-limits ICMP, busy Wi-Fi, serial congestion | Use a fixed 2.4 GHz router; disable auto-channel; raise UART to 921600; switch to official second-board `csi_send` | Explain router vs dedicated-TX modes |
 | No Wi-Fi association | Phone is 5 GHz-only, WPA mode mismatch, band steering | Enable 2.4 GHz compatibility SSID/WPA2; use a travel router | Bring the travel router / TX board |
 | Garbled or dropped CSV | Baud mismatch, another program uses COM port, too much logging | Match 921600; close monitor; leave `#` logs filtered; inspect backend frame counter | Fix the serial stream before continuing the live demo |

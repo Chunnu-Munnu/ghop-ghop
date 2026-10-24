@@ -1,0 +1,4 @@
+# Overlay for boards that only expose the ESP32-S3's native USB connector
+# (USB-Serial-JTAG, VID 303A). Applied by tools/build-flash.ps1 -Console usb.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y

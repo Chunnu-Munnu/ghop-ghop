@@ -15,7 +15,8 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 
 
-FEATURES = ["band_energy", "peak_ratio", "variance", "spectral_entropy"]
+# Must match CSIProcessor._model_probability's feature order.
+FEATURES = ["strength_db", "periodicity", "concentration", "motion_index"]
 
 
 def parse_args() -> argparse.Namespace:

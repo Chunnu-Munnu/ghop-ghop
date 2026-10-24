@@ -7,7 +7,7 @@ Calibrate after every meaningful geometry change: AP/transmitter position, ESP32
 1. Lock the transmitter to 2.4 GHz and one fixed channel. Disable router auto-channel/band steering if possible.
 2. Put the ESP32 receiver at the planned rescue-side location and leave its antenna/orientation unchanged. Keep the transmitter at least one metre away.
 3. Place the same wall/rubble material between the link endpoints that you will use in the pitch.
-4. Start the backend in `--simulate` first to verify the dashboard, then start it on the receiver serial port. Verify that telemetry reports roughly 80–120 CSI frames/s and a sensible RSSI.
+4. Start the backend with `.\tools\start-demo.ps1 -Simulate` first to verify the dashboard, then start it on the receiver (`.\tools\start-demo.ps1`). Verify that Signal health reports roughly 80–120 pkt/s and a sensible RSSI.
 5. Do not let spectators move through the link during the recordings. Keep phones and people away from the Fresnel zone except for the subject.
 
 ## Record the empty-room baseline — 30 seconds
@@ -18,7 +18,7 @@ With no person inside the sensing zone, start the backend's **empty** calibratio
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/calibration/start -ContentType application/json -Body '{"kind":"empty","duration_seconds":30}'
 ```
 
-The backend stores carrier variance and breathing-band energy. This establishes the adaptive variance floor and the maximum normal empty-room peak ratio.
+The backend stores the room's breathing-band strength, periodicity and concentration. This raises the detection thresholds to that room's own "nothing here" level, so background clutter does not read as breathing. Use the dashboard's Calibration card, or the REST calls below.
 
 Accept the baseline only if frame rate is stable and the dashboard does not show a persistent breathing peak. If it does, reduce environmental motion, choose a cleaner channel, check for a fan/curtain, and repeat.
 

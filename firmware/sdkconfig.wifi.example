@@ -1,0 +1,5 @@
+# Copy this file to sdkconfig.wifi (same folder) and fill in your network.
+# sdkconfig.wifi is git-ignored, so the password never lands in source control.
+# Must be a 2.4 GHz network (iPhone: Personal Hotspot -> Maximize Compatibility).
+CONFIG_RESCUE_WIFI_SSID="YourHotspotName"
+CONFIG_RESCUE_WIFI_PASSWORD="your-wifi-password"

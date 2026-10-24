@@ -1,90 +1,118 @@
 # RescueSense — camera-free Wi-Fi CSI breathing demonstrator
 
-RescueSense uses an ESP32-S3 receiver, ordinary 2.4 GHz Wi-Fi CSI, and laptop-side DSP to surface a **breathing-like periodic signal**, BPM estimate, confidence, and calibrated **estimated proximity (0–5 m)** through a live 3D dashboard. It is designed for a 10-hour hackathon demo, not for real rescue deployment or medical confirmation.
+RescueSense uses an ESP32-S3 receiver, ordinary 2.4 GHz Wi-Fi channel-state
+information (CSI), and laptop-side DSP to surface a **breathing-like periodic
+signal**, a BPM estimate, a confidence score, and a calibrated **estimated
+proximity (0–5 m)** on a live dashboard. It is a hackathon demonstrator, not a
+medically validated life detector or a through-wall rangefinder.
 
-## Live hardware launch — use this for the real-time demo
+## What's in the box
 
-First flash the receiver and set its Wi-Fi credentials using [the firmware setup guide](docs/firmware-setup.md). The password goes in **`idf.py menuconfig → Example Connection Configuration → WiFi Password`** before you build and flash; it is the password for the router/hotspot the ESP32-S3 will join.
-
-After flashing, close `idf.py monitor` so Python can own the COM port. Then run the actual hardware pipeline:
-
-```powershell
-Set-Location .\backend
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python app.py --serial-port COM5 --baud 921600 --auto-alert
-```
-
-Replace `COM5` with the ESP32-S3 port from Device Manager. **Do not add `--simulate` for the real demo.** Open [dashboard/index.html](dashboard/index.html) in a browser; it normally connects to `ws://127.0.0.1:8000/ws` automatically. Wait about 30 seconds, then verify that the dashboard says **LIVE CSI**, not `DEMO STREAM`.
-
-If the browser is on another machine, start the backend with `--host 0.0.0.0` and use `ws://<laptop-ip>:8000/ws` in the dashboard.
-
-## Optional simulator fallback
-
-Simulation is only a UI/DSP fallback when hardware is unavailable. It does not read the ESP32:
-
-```powershell
-python app.py --simulate
-```
-
-It warms a synthetic 30-second buffer at startup and displays a coherent 15 BPM / 2.5 m visual stream. Label it as a fallback if you ever use it.
-
-## 4-hour working route
-
-| Time | Outcome |
+| Part | Role |
 | --- | --- |
-| 0:00–1:30 | Build/flash official ESP-CSI-derived receiver; set Wi-Fi credentials; see 80–120 `CSI,` lines per second |
-| 1:30–2:15 | Run serial backend; get `LIVE CSI` into dashboard |
-| 2:15–3:15 | Record empty room plus 1–5 m calibration anchors |
-| 3:15–4:00 | Tune geometry/channel, wire/test the buzzer, rehearse 5-minute story |
-| 4:00–10:00 | Optional RandomForest, second ESP32 TX fallback, polish/pitch prep |
+| `firmware/` | ESP32-S3 receiver (derived from Espressif's official esp-csi examples) |
+| `backend/` | Python DSP + WebSocket server; also serves the dashboard |
+| `dashboard/` | Single-page web console (no build step) |
+| `tools/` | PowerShell setup, build/flash, and run scripts |
+| `docs/` | Firmware setup, calibration, demo script, failure modes, architecture |
 
-## Start with these docs
+## Quick start (laptop, no hardware)
 
-- [Architecture and file tree](docs/architecture.md)
-- [Firmware setup, exact Espressif example, ESP-IDF pin, flash commands](docs/firmware-setup.md)
-- [Calibration procedure](docs/calibration.md)
-- [Five-minute demo script](docs/demo-script.md)
-- [Failure modes and venue triage](docs/failure-modes.md)
-- [Backend API, DSP pipeline, labelled data collection, optional RandomForest](backend/README.md)
+You can run the whole UI and DSP against a built-in simulator before the board
+is ready. From `RescueSense_VisionX/`:
 
-## Hardware wiring defaults
+```powershell
+.\tools\setup.ps1          # one-time: prepares a Python environment if needed
+.\tools\start-demo.ps1 -Simulate
+```
 
-| Item | Default GPIO | Notes |
+A browser opens at `http://127.0.0.1:8000`. The stream is clearly badged
+**SIMULATION · not real data** — it is a UI/DSP rehearsal aid, not a detection.
+
+## Live hardware run
+
+1. **Flash the receiver.** Copy `firmware\sdkconfig.wifi.example` to
+   `firmware\sdkconfig.wifi`, put your **2.4 GHz** network name and password in
+   it, then build and flash (needs ESP-IDF v5.5.x — see
+   [docs/firmware-setup.md](docs/firmware-setup.md)):
+
+   ```powershell
+   .\tools\build-flash.ps1
+   ```
+
+   The script copies the firmware to a space-free path (ESP-IDF cannot build
+   from `HACK0WEEN 2.0`), configures the target, builds, finds the board's COM
+   port (Bluetooth ports are ignored), and flashes. Use `-Console usb` for
+   boards that only expose the native USB connector.
+
+2. **Start the backend.** It auto-detects the ESP32 serial port:
+
+   ```powershell
+   .\tools\start-demo.ps1
+   ```
+
+   Or run it directly, with options:
+
+   ```powershell
+   cd backend
+   python app.py                     # auto-detect port, serve dashboard
+   python app.py --serial-port COM9  # explicit port
+   python app.py --auto-alert        # buzzer follows detections
+   python app.py --list-ports        # show candidate ports and exit
+   ```
+
+3. **Open the dashboard** at `http://127.0.0.1:8000`. Within ~30 s the header
+   should read **Live** with a packet rate near 100 pkt/s. If a browser on
+   another machine needs it, start with `--host 0.0.0.0` and open
+   `http://<laptop-ip>:8000`.
+
+4. **Calibrate** from the dashboard: record a 30 s empty-room baseline, then
+   (optionally) 1–5 m distance anchors to enable proximity. See
+   [docs/calibration.md](docs/calibration.md).
+
+## How it works
+
+```
+2.4 GHz AP  --Wi-Fi-->  ESP32-S3 CSI receiver  --USB serial-->  Python DSP  --WebSocket-->  Dashboard
+(or a 2nd ESP32                                  CSI,ts,rssi,amp…   detection + calibration     live console
+ running csi_send)                                                                              |
+Dashboard  --alert command-->  backend  --ALERT,1/0 serial-->  ESP32  -->  buzzer
+```
+
+The receiver does RF acquisition, AGC-gain compensation, and alert I/O only.
+The laptop owns all signal processing. Each second the newest 30 s of CSI are:
+
+1. filtered for stray-width and corrupted packets (one odd packet no longer
+   wipes the window), DC/guard subcarriers masked;
+2. averaged to 10 Hz and whitened per subcarrier by its own noise level, with
+   residual receiver-gain steps removed;
+3. checked for gross body movement (0.8–4 Hz); breathing is measured only from
+   the still signal after the last movement;
+4. combined across subcarriers with PCA, keeping the **most periodic**
+   component;
+5. scored on **rhythm** (autocorrelation), **focus** (spectral concentration)
+   and **strength** (vs. the empty-room background). Confidence is their
+   weighted combination; a hysteresis state machine decides
+   `breathing / clear / movement / warming up / no signal`.
+
+See [docs/architecture.md](docs/architecture.md) for the full pipeline.
+
+## Hardware wiring
+
+| Item | Default | Notes |
 | --- | --- | --- |
-| Active buzzer control | GPIO4 | Use an NPN/MOSFET driver; do not drive a buzzer from GPIO power |
+| Active buzzer | GPIO4 | Drive through a transistor/MOSFET — never straight off a GPIO |
 
-No LED wiring is required. Leave the individual colour LEDs disconnected for now; the dashboard's red alert state remains visual, while the physical alert is the buzzer only.
-
-Set the real buzzer pin in **`idf.py menuconfig → RescueSense → Buzzer GPIO (active high)`** after checking your exact board schematic. Avoid strapping pins, USB Serial/JTAG GPIO19/20, UART0 GPIO43/44, and flash/PSRAM pins.
-
-## Core data contract
-
-Firmware emits one compact line per CSI packet:
-
-```text
-CSI,<timestamp_us>,<rssi_dbm>,<amp_sc0>,<amp_sc1>,...
-```
-
-The backend broadcasts once per second at `/ws`:
-
-```json
-{
-  "presence": true,
-  "bpm": 15.0,
-  "confidence": 0.66,
-  "distance_m": 2.5,
-  "distance_uncertainty_m": 0.5,
-  "rssi": -51.0,
-  "raw_waveform": [{"t": -29.9, "v": 0.14}],
-  "filtered_waveform": [{"t": -29.9, "v": 0.04}],
-  "spectrum": [{"hz": 0.25, "power": 1.2}]
-}
-```
-
-Alert commands travel dashboard → WebSocket → backend → ESP32 serial as `ALERT,1\n` / `ALERT,0\n`.
+Set the real pin in `firmware\main\Kconfig.projbuild` or via `idf.py menuconfig
+→ RescueSense → Buzzer GPIO`. Avoid strapping pins, USB GPIO19/20, UART0
+GPIO43/44, and flash/PSRAM pins. The buzzer also stops on its own if the laptop
+stops sending its heartbeat (configurable alert timeout).
 
 ## Integrity of the claim
 
-Use the words **“Breathing detected”** only for a calibrated respiration-band signature that clears the empty-room baseline. Call the range output **“estimated proximity”** and leave its uncertainty visible. Wi-Fi CSI varies substantially with room geometry, antennas, metal, motion, and channel; it cannot establish a person’s survival or exact physical distance.
+Say **"Breathing detected"** only for a calibrated respiration-band signature
+that clears the empty-room baseline. Call the range output **"estimated
+proximity"** and keep its uncertainty visible. Wi-Fi CSI varies with geometry,
+antennas, metal, motion and channel; it cannot establish survival or an exact
+distance. When the RF link is poor, use the clearly-labelled simulation mode
+rather than presenting synthetic data as a live detection.

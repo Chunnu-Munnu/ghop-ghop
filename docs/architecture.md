@@ -16,7 +16,7 @@ The receiver does only RF acquisition, compact magnitude conversion, and alert I
 
 1. The ESP32-S3 receives repeatable Wi-Fi packets from a 2.4 GHz router/hotspot or the official `csi_send` example.
 2. Firmware filters to the expected BSSID/MAC, copies CSI out of the Wi-Fi callback into a FreeRTOS queue, calculates complex magnitude in a lower-priority task, and emits `CSI,timestamp_us,rssi,amp...` at roughly 100 Hz.
-3. The backend removes invalid/guard subcarriers, Hampel-filters each retained carrier, resamples to a uniform rate, and selects the PCA component with the strongest 0.1–0.5 Hz breathing-band energy.
+3. The backend drops stray-width/corrupted packets, masks invalid/guard subcarriers, averages to 10 Hz, whitens each carrier by its own noise level, removes residual gain steps, rejects windows with gross body movement, and selects the **most periodic** PCA component across subcarriers.
 4. Every one-second hop, a 30-second window is band-passed and analyzed with Welch/FFT. The backend estimates BPM, peak-to-band confidence, presence, and a calibrated estimated proximity with uncertainty.
 5. The dashboard consumes one telemetry object per second. It animates a human marker with the estimated respiratory phase and renders alert state, waveform, and spectrum.
 
@@ -33,13 +33,20 @@ rescue-sense/
 │       ├── Kconfig.projbuild
 │       └── idf_component.yml
 ├── backend/
-│   ├── app.py                         # FastAPI server, serial/simulate ingest, DSP, WebSocket
+│   ├── app.py                         # Starlette server, serial/simulate ingest, DSP, WebSocket
+│   ├── processing.py                  # CSI DSP, scoring, calibration
+│   ├── serial_io.py                   # port discovery, wire parsing, reconnect, simulator
 │   ├── collect.py                     # labelled recording utility
 │   ├── train_presence_model.py        # optional RandomForest trainer
+│   ├── tests/                         # regression suite + accuracy sweep
 │   ├── requirements.txt
 │   └── README.md
 ├── dashboard/
-│   └── index.html                     # no build step; Three.js + canvas charts
+│   └── index.html                     # no build step; canvas charts
+├── tools/
+│   ├── setup.ps1                      # prepare the Python environment
+│   ├── build-flash.ps1                # build + flash the firmware
+│   └── start-demo.ps1                 # run the backend + dashboard
 ├── docs/
 │   ├── architecture.md
 │   ├── firmware-setup.md

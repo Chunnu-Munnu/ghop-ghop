@@ -4,15 +4,15 @@
 
 > “RescueSense is a camera-free breathing-motion demonstrator. It uses ordinary 2.4 GHz Wi-Fi packets and the ESP32-S3's channel-state information, so it can keep watching when optical cameras are obstructed.”
 
-Start the backend with `python app.py --serial-port COM5 --baud 921600 --auto-alert`, with `COM5` replaced by the ESP32 port. Open the dashboard and show that its status says `LIVE CSI`. Point to the ESP32 marker, 1–5 m rings, wall/rubble mesh, pulsing survivor, BPM, confidence, and the three signal plots.
+Start the backend with `.\tools\start-demo.ps1 -AutoAlert` (it auto-detects the ESP32 port and serves the dashboard at `http://127.0.0.1:8000`). Show that the header reads **Live** with a packet rate near 100 pkt/s. Point to the breathing waveform, the rhythm/focus/strength scores, BPM, confidence, the spectrum peak, the subcarrier activity map, and the detection timeline.
 
-Keep `--simulate` as a clearly labelled fallback only; do not use it for the primary live claim.
+Keep simulation (`-Simulate`) as a clearly labelled fallback only; it is badged **SIMULATION · not real data** and must never be presented as a live detection.
 
 ## 0:35–1:15 — show the acquisition path
 
 > “The receiver starts from Espressif's official `csi_recv_router` example. It asks the router for a packet every 10 ms, reads the channel response, and sends only timestamp, RSSI, and CSI magnitudes to the laptop. The heavy DSP stays on the laptop.”
 
-Show the ESP32 serial lines briefly, then close the serial monitor so the backend owns the port. Start the live backend. Let the dashboard switch from `DEMO STREAM` to `LIVE CSI`.
+Show the ESP32 serial lines briefly (`.\tools\build-flash.ps1 -Monitor`), then close the monitor so the backend owns the port. Start the live backend. Let the dashboard header move from **Simulation** to **Live**.
 
 ## 1:15–2:05 — explain only the working signal chain
 

@@ -1,9 +1,15 @@
 backend/.venv/
 backend/__pycache__/
+backend/tests/__pycache__/
 backend/calibration.json
+backend/calibration.simulated.json
 backend/*.joblib
+backend/*.joblib.json
 backend/recordings/
 __pycache__/
 build/
 sdkconfig
 sdkconfig.old
+firmware/sdkconfig.wifi
+firmware/managed_components/
+firmware/dependencies.lock

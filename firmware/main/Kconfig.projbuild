@@ -7,11 +7,35 @@ config RESCUE_ROUTER_MODE
         Connect to an AP and ping its gateway at the configured rate. Disable
         only when using Espressif's stock csi_send on a second ESP32.
 
+config RESCUE_WIFI_SSID
+    string "Wi-Fi network name (SSID, 2.4 GHz)"
+    default "RescueSense"
+    depends on RESCUE_ROUTER_MODE
+    help
+        The ESP32-S3 is 2.4 GHz only. On an iPhone hotspot enable
+        "Maximize Compatibility"; on Android pick the 2.4 GHz band.
+        tools/build-flash.ps1 fills this from firmware/sdkconfig.wifi.
+
+config RESCUE_WIFI_PASSWORD
+    string "Wi-Fi password"
+    default ""
+    depends on RESCUE_ROUTER_MODE
+    help
+        Leave empty for an open network.
+
 config RESCUE_PING_HZ
     int "Router ping / CSI sample rate (Hz)"
     range 10 150
     default 100
     depends on RESCUE_ROUTER_MODE
+
+config RESCUE_FORCE_HT20
+    bool "Request 20 MHz frames from the AP"
+    default y
+    depends on RESCUE_ROUTER_MODE
+    help
+        Keeps every CSI packet at 64 subcarriers. Mixed 20/40 MHz traffic
+        otherwise produces two different row widths.
 
 config RESCUE_DIRECT_CHANNEL
     int "Fixed Wi-Fi channel for dedicated ESP-NOW transmitter"
@@ -22,6 +46,25 @@ config RESCUE_DIRECT_CHANNEL
         Matches the HT40 secondary-channel-below arrangement in Espressif's
         stock csi_send example. Change the sender and receiver together.
 
+choice RESCUE_GAIN_MODE
+    prompt "Receiver gain (AGC) handling"
+    default RESCUE_GAIN_COMPENSATE
+    help
+        Automatic gain control rescales CSI amplitude whenever it steps,
+        which looks exactly like body motion. Compensation (Espressif's
+        recommended approach) divides each packet by its gain change.
+
+config RESCUE_GAIN_COMPENSATE
+    bool "Compensate every packet for AGC/FFT gain changes (recommended)"
+
+config RESCUE_GAIN_FORCE
+    bool "Lock the receiver gain at the measured baseline (may lose packets)"
+
+config RESCUE_GAIN_OFF
+    bool "Raw amplitudes, no gain handling"
+
+endchoice
+
 config RESCUE_BUZZER_GPIO
     int "Buzzer GPIO (active high)"
     range 0 48
@@ -29,5 +72,13 @@ config RESCUE_BUZZER_GPIO
     help
         Check your exact board schematic. ESP32-S3 GPIO22-25 are unavailable;
         avoid strapping pins, USB 19/20, UART 43/44, and flash/PSRAM pins.
+
+config RESCUE_ALERT_TIMEOUT_S
+    int "Silence the buzzer after N seconds without a laptop heartbeat (0 = never)"
+    range 0 600
+    default 20
+    help
+        The backend refreshes the alert state every 5 seconds. If the laptop
+        crashes or the cable is pulled, the buzzer stops on its own.
 
 endmenu
